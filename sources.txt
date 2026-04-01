@@ -1,0 +1,11 @@
+src/crdt/block/Block.java
+src/crdt/block/BlockCRDT.java
+src/crdt/block/BlockID.java
+src/crdt/character/CharacterCRDT.java
+src/crdt/character/CharId.java
+src/crdt/character/CRDTChar.java
+src/Main.java
+src/operations/DeleteOperation.java
+src/operations/InsertOperation.java
+src/operations/Operation.java
+src/utils/Clock.java

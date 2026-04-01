@@ -15,7 +15,7 @@ public class CharId implements Comparable<CharId> {
     @Override
     public int compareTo(CharId other) {
         if (this.counter != other.counter) {
-            return Integer.compare(other.counter, this.counter);
+            return Integer.compare(this.counter, other.counter);
         }
         return Integer.compare(this.userID, other.userID);
     }
