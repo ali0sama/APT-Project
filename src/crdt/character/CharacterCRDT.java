@@ -115,4 +115,72 @@ public class CharacterCRDT {
                 charMap.get(rc.id).markDeleted();
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Methods added for BlockCRDT support (Member 3)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Count the number of visible lines (newline characters + 1).
+     * Used by BlockCRDT to enforce the 2-10 line block size constraint.
+     */
+    public int getLineCount() {
+        int lines = 1;
+        for (CRDTChar c : charMap.values()) {
+            if (!c.isDeleted() && c.value == '\n') lines++;
+        }
+        return lines;
+    }
+
+    /**
+     * Remove all characters from this CRDT.
+     * Used by BlockCRDT.splitBlock() when redistributing characters
+     * between blocks after a split.
+     */
+    public void clear() {
+        charMap.clear();
+        children.clear();
+        children.put(null, new ArrayList<>());
+    }
+
+    /**
+     * Bulk-load a list of CRDTChar nodes (including tombstones) into this CRDT.
+     * Preserves each character's original parentID so the tree structure is maintained.
+     * Skips duplicates (idempotent).
+     *
+     * Used by BlockCRDT to move characters between blocks during splits and merges.
+     */
+    public void bulkLoad(List<CRDTChar> chars) {
+        for (CRDTChar c : chars) {
+            if (!charMap.containsKey(c.id)) {
+                charMap.put(c.id, c);
+                children.computeIfAbsent(c.parentID, k -> new ArrayList<>()).add(c);
+                children.get(c.parentID).sort(Comparator.comparing(ch -> ch.id));
+            }
+            if (c.isDeleted()) {
+                charMap.get(c.id).markDeleted();
+            }
+        }
+    }
+    public void bulkLoadLinear(List<CRDTChar> chars) {
+    clear();
+
+    CharId newParent = null;
+
+    for (CRDTChar oldChar : chars) {
+        CRDTChar newChar = new CRDTChar(oldChar.id, oldChar.value, newParent);
+
+        if (oldChar.isDeleted()) {
+            newChar.markDeleted();
+        }
+        newChar.setBold(oldChar.isBold());
+        newChar.setItalic(oldChar.isItalic());
+
+        charMap.put(newChar.id, newChar);
+        children.computeIfAbsent(newParent, k -> new ArrayList<>()).add(newChar);
+        children.get(newParent).sort(Comparator.comparing(ch -> ch.id));
+
+        newParent = newChar.id;
+    }
+ }
 }
