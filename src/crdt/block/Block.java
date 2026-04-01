@@ -2,74 +2,38 @@ package crdt.block;
 
 import crdt.character.CharacterCRDT;
 
-/**
- * A Block is one logical paragraph-unit of the document.
- *
- * The document is an ordered sequence of Blocks managed by {@link BlockCRDT}.
- * Each Block wraps a {@link CharacterCRDT} that holds the characters inside it.
- *
- * Block size invariant (enforced during splits):
- *   Minimum: 2 lines    Maximum: 10 lines
- *
- * A tombstoned block is logically deleted but stays in memory so that the
- * split log can still resolve concurrent splits that reference it.
- */
 public class Block {
+    private final BlockID blockId;
+    private final CharacterCRDT content; 
+    private boolean isDeleted; 
 
-    // -----------------------------------------------------------------------
-    // Fields
-    // -----------------------------------------------------------------------
-
-    private final BlockID        blockID;
-    private final CharacterCRDT  content;
-    private boolean              tombstone;
-
-    // -----------------------------------------------------------------------
-    // Construction
-    // -----------------------------------------------------------------------
-
-    /** Create a new empty block. */
-    public Block(int counter, int userID) {
-        this.blockID   = new BlockID(counter, userID);
-        this.content   = new CharacterCRDT();
-        this.tombstone = false;
+    public Block(BlockID blockId) {
+        this.blockId = blockId;
+        this.content = new CharacterCRDT();
+        this.isDeleted = false;
     }
 
-    /** Package-private: used internally by BlockCRDT when building split results. */
-    Block(BlockID id) {
-        this.blockID   = id;
-        this.content   = new CharacterCRDT();
-        this.tombstone = false;
+    
+    public boolean isValidSize() {
+        String text = content.getDocument();
+        if (text.isEmpty()) return false;
+        String[] lines = text.split("\r\n|\r|\n");
+        return lines.length >= 2 && lines.length <= 10;
     }
 
-    // -----------------------------------------------------------------------
-    // Tombstone
-    // -----------------------------------------------------------------------
-
-    public void tombstone()      { this.tombstone = true; }
-    public boolean isTombstone() { return tombstone; }
-
-    // -----------------------------------------------------------------------
-    // Accessors
-    // -----------------------------------------------------------------------
-
-    public BlockID        getBlockID() { return blockID; }
-    public CharacterCRDT  getContent() { return content; }
-
-    /** Convenience: number of visible lines in this block's CharacterCRDT. */
-    public int getLineCount() {
-        return content.getLineCount();
+    public void delete() {
+        this.isDeleted = true;  
     }
 
-    // -----------------------------------------------------------------------
-    // Debug
-    // -----------------------------------------------------------------------
+    public boolean isVisible() {
+        return !isDeleted;
+    }
 
-    @Override
-    public String toString() {
-        return "Block{id=" + blockID
-                + (tombstone ? " †" : "")
-                + ", lines=" + getLineCount()
-                + ", text=\"" + content.getDocument().replace("\n", "↵") + "\"}";
+    public BlockID getBlockId() {
+        return blockId;
+    }
+
+    public CharacterCRDT getContent() {
+        return content;
     }
 }
