@@ -3,7 +3,7 @@ import crdt.block.BlockCRDT;
 import crdt.block.BlockID;
 import crdt.character.CharId;
 import crdt.character.CharacterCRDT;
-import utils.Clock;
+import crdt.utils.Clock;
 
 public class Main {
 
