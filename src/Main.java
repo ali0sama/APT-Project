@@ -27,8 +27,8 @@ public class Main {
         test9_BlockInsertionDeterministicOrdering();
         test10_NormalBlockSplit();
         test11_ConcurrentSplitTieBreaker();
-        
         test12_OperationApply();
+        test13_ConcurrentInsertSamePosition();
 
         System.out.println("\n==============================");
         System.out.println("Results: " + passed + " passed, " + failed + " failed");
@@ -237,16 +237,31 @@ public class Main {
     }
 
     static void test12_OperationApply() {
-    CharacterCRDT crdt = new CharacterCRDT();
+        CharacterCRDT crdt = new CharacterCRDT();
 
-    InsertOperation op1 = new InsertOperation(1, 1, 'H', null);
-    InsertOperation op2 = new InsertOperation(1, 2, 'i', op1.charID);
+        InsertOperation op1 = new InsertOperation(1, 1, 'H', null);
+        InsertOperation op2 = new InsertOperation(1, 2, 'i', op1.charID);
 
-    op1.apply(crdt);
-    op2.apply(crdt);
+        op1.apply(crdt);
+        op2.apply(crdt);
 
-    check("Test 12 - Operation apply", "Hi", crdt.getDocument());
+        check("Test 12 - Operation apply", "Hi", crdt.getDocument());
     }
-    
+
+    static void test13_ConcurrentInsertSamePosition() {
+        CharacterCRDT crdt = new CharacterCRDT();
+
+        CharId root = new CharId(1, 1);
+        crdt.insert(root, 'A', null);
+
+        // Two users insert at SAME position
+        InsertOperation op1 = new InsertOperation(2, 2, 'X', root);
+        InsertOperation op2 = new InsertOperation(1, 2, 'Y', root);
+
+        op1.apply(crdt);
+        op2.apply(crdt);
+
+        check("Test 13 - Concurrent insert ordering", "AYX", crdt.getDocument());
+    }
 
 }
