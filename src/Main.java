@@ -4,6 +4,7 @@ import crdt.block.BlockID;
 import crdt.character.CharId;
 import crdt.character.CharacterCRDT;
 import crdt.utils.Clock;
+import operations.DeleteOperation;
 import operations.InsertOperation;
 
 public class Main {
@@ -29,6 +30,7 @@ public class Main {
         test11_ConcurrentSplitTieBreaker();
         test12_OperationApply();
         test13_ConcurrentInsertSamePosition();
+        test14_DeleteWhileInsert();
 
         System.out.println("\n==============================");
         System.out.println("Results: " + passed + " passed, " + failed + " failed");
@@ -263,5 +265,22 @@ public class Main {
 
         check("Test 13 - Concurrent insert ordering", "AYX", crdt.getDocument());
     }
+
+    static void test14_DeleteWhileInsert() {
+        CharacterCRDT crdt = new CharacterCRDT();
+
+        CharId a = new CharId(1, 1);
+        crdt.insert(a, 'A', null);
+
+        InsertOperation op1 = new InsertOperation(2, 2, 'B', a);
+        DeleteOperation op2 = new DeleteOperation(1, 3, a);
+
+        op1.apply(crdt);
+        op2.apply(crdt);
+
+        check("Test 14 - Delete + insert", "B", crdt.getDocument());
+    }
+
+    
 
 }
