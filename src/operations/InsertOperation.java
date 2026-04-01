@@ -1,6 +1,7 @@
 package operations;
 
 import crdt.character.CharId;
+import crdt.character.CharacterCRDT;
 
 public class InsertOperation extends Operation {
 
@@ -28,8 +29,12 @@ public class InsertOperation extends Operation {
         return Type.INSERT;
     }
 
+    // ✅ ADD THIS
     @Override
-    public String toString() {
-        return "InsertOperation{charID=" + charID + ", value='" + value + "', parent=" + parentID + "}";
+    public void apply(CharacterCRDT crdt) {
+        crdt.insert(charID, value, parentID);
+
+        if (bold) crdt.setBold(charID, true);
+        if (italic) crdt.setItalic(charID, true);
     }
 }

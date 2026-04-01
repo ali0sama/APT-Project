@@ -4,6 +4,7 @@ import crdt.block.BlockID;
 import crdt.character.CharId;
 import crdt.character.CharacterCRDT;
 import crdt.utils.Clock;
+import operations.InsertOperation;
 
 public class Main {
 
@@ -26,6 +27,8 @@ public class Main {
         test9_BlockInsertionDeterministicOrdering();
         test10_NormalBlockSplit();
         test11_ConcurrentSplitTieBreaker();
+        
+        test12_OperationApply();
 
         System.out.println("\n==============================");
         System.out.println("Results: " + passed + " passed, " + failed + " failed");
@@ -232,4 +235,18 @@ public class Main {
 
         checkTrue("Test 11 - Concurrent split tie-break", ok);
     }
+
+    static void test12_OperationApply() {
+    CharacterCRDT crdt = new CharacterCRDT();
+
+    InsertOperation op1 = new InsertOperation(1, 1, 'H', null);
+    InsertOperation op2 = new InsertOperation(1, 2, 'i', op1.charID);
+
+    op1.apply(crdt);
+    op2.apply(crdt);
+
+    check("Test 12 - Operation apply", "Hi", crdt.getDocument());
+    }
+    
+
 }

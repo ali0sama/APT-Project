@@ -1,6 +1,7 @@
 package operations;
 
 import crdt.character.CharId;
+import crdt.character.CharacterCRDT;
 
 public class DeleteOperation extends Operation {
 
@@ -16,8 +17,9 @@ public class DeleteOperation extends Operation {
         return Type.DELETE;
     }
 
+    // ✅ ADD THIS
     @Override
-    public String toString() {
-        return "DeleteOperation{userID=" + userID + ", clock=" + clock + ", targetID=" + targetID + "}";
+    public void apply(CharacterCRDT crdt) {
+        crdt.delete(targetID);
     }
 }
