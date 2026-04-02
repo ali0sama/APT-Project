@@ -6,6 +6,7 @@ public class CharacterCRDT {
 
     private final Map<CharId, CRDTChar> charMap = new HashMap<>();
     private final Map<CharId, List<CRDTChar>> children = new HashMap<>();
+    private final Set<CharId> pendingDeletes = new HashSet<>();
 
     public CharacterCRDT() {
         children.put(null, new ArrayList<>());
@@ -20,12 +21,18 @@ public class CharacterCRDT {
 
         children.computeIfAbsent(parentID, k -> new ArrayList<>()).add(newChar);
         children.get(parentID).sort(Comparator.comparing(c -> c.id));
+
+        if (pendingDeletes.remove(id)) {
+            newChar.markDeleted();
+        }
     }
 
     public void delete(CharId targetID) {
         CRDTChar target = charMap.get(targetID);
-        if (target == null)
-            throw new NoSuchElementException("Character not found: " + targetID);
+        if (target == null) {
+            pendingDeletes.add(targetID);
+            return;
+        }
         target.markDeleted();
     }
 
@@ -140,6 +147,7 @@ public class CharacterCRDT {
     public void clear() {
         charMap.clear();
         children.clear();
+        pendingDeletes.clear();
         children.put(null, new ArrayList<>());
     }
 
@@ -157,7 +165,7 @@ public class CharacterCRDT {
                 children.computeIfAbsent(c.parentID, k -> new ArrayList<>()).add(c);
                 children.get(c.parentID).sort(Comparator.comparing(ch -> ch.id));
             }
-            if (c.isDeleted()) {
+            if (c.isDeleted() || pendingDeletes.remove(c.id)) {
                 charMap.get(c.id).markDeleted();
             }
         }

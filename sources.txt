@@ -4,8 +4,13 @@ src/crdt/block/BlockID.java
 src/crdt/character/CharacterCRDT.java
 src/crdt/character/CharId.java
 src/crdt/character/CRDTChar.java
+src/crdt/utils/Clock.java
+src/demo/ConsoleDemo.java
 src/Main.java
 src/operations/DeleteOperation.java
 src/operations/InsertOperation.java
 src/operations/Operation.java
-src/utils/Clock.java
+src/tests/BlockCRDTTest.java
+src/tests/CharCRDTTest.java
+src/tests/SpecialCaseTest.java
+src/tests/IntegrationTest.java
