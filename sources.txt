@@ -12,5 +12,5 @@ src/operations/InsertOperation.java
 src/operations/Operation.java
 src/tests/BlockCRDTTest.java
 src/tests/CharCRDTTest.java
-src/tests/SpecialCaseTest.java
 src/tests/IntegrationTest.java
+src/tests/SpecialCaseTest.java
