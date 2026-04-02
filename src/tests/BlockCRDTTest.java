@@ -56,8 +56,8 @@ public class BlockCRDTTest {
 	static void test9_BlockInsertionDeterministicOrdering() {
 		BlockCRDT crdt = new BlockCRDT();
 
-		Block b = new Block(5, 2);
-		Block a = new Block(5, 1);
+		Block b = new Block(new BlockID(5, 2));
+		Block a = new Block(new BlockID(5, 1));
 
 		a.getContent().insert(new CharId(1, 1), 'A', null);
 		b.getContent().insert(new CharId(1, 2), 'B', null);
@@ -70,7 +70,7 @@ public class BlockCRDTTest {
 
 	static void test10_NormalBlockSplit() {
 		BlockCRDT crdt = new BlockCRDT();
-		Block block = new Block(1, 1);
+		Block block = new Block(new BlockID(1, 1));
 
 		CharId a = new CharId(1, 1);
 		CharId b = new CharId(2, 1);
@@ -83,7 +83,7 @@ public class BlockCRDTTest {
 		block.getContent().insert(d, 'D', c);
 
 		crdt.insertBlock(block);
-		crdt.splitBlock(block.getBlockID(), b, new BlockID(2, 1));
+		crdt.splitBlock(block.getBlockId(), b, new BlockID(2, 1));
 
 		boolean ok = crdt.getVisibleBlocks().size() == 2 && crdt.getVisibleBlocks().get(0).getContent().getDocument().equals("AB") && crdt.getVisibleBlocks().get(1).getContent().getDocument().equals("CD");
 
@@ -92,7 +92,7 @@ public class BlockCRDTTest {
 
 	static void test11_ConcurrentSplitTieBreaker() {
 		BlockCRDT crdt = new BlockCRDT();
-		Block block = new Block(1, 1);
+		Block block = new Block(new BlockID(1, 1));
 
 		CharId a = new CharId(1, 1);
 		CharId b = new CharId(2, 1);
@@ -105,8 +105,8 @@ public class BlockCRDTTest {
 		block.getContent().insert(d, 'D', c);
 
 		crdt.insertBlock(block);
-		crdt.splitBlock(block.getBlockID(), b, new BlockID(5, 2));
-		crdt.splitBlock(block.getBlockID(), b, new BlockID(5, 1));
+		crdt.splitBlock(block.getBlockId(), b, new BlockID(5, 2));
+		crdt.splitBlock(block.getBlockId(), b, new BlockID(5, 1));
 
 		checkTrue("Test 11 - Concurrent split tie-break", crdt.getVisibleBlocks().size() == 3);
 	}
