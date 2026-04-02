@@ -2,10 +2,18 @@ package crdt.block;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class BlockCRDT {
     private final List<Block> blocks;
+
+    private boolean hasBlock(BlockID id) {
+        for (Block b : blocks) {
+            if (b.getBlockId().equals(id)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     public BlockCRDT() {
         this.blocks = new ArrayList<>();
@@ -43,18 +51,33 @@ public class BlockCRDT {
     }
 
 public List<Block> getVisibleBlocks() {
-    return blocks.stream()
-            .filter(Block::isVisible)
-            .sorted((b1, b2) -> b1.getBlockId().compareTo(b2.getBlockId())) 
-            .collect(Collectors.toList());
+    List<Block> visible = new ArrayList<>();
+    for (Block b : blocks) {
+        if (b.isVisible()) {
+            visible.add(b);
+        }
+    }
+    return visible;
 }
 
 
     public void insertBlock(Block b) {
-    this.blocks.add(b);
+    if (hasBlock(b.getBlockId())) {
+        return;
+    }
+
+    int insertAt = 0;
+    while (insertAt < blocks.size() && blocks.get(insertAt).getBlockId().compareTo(b.getBlockId()) <= 0) {
+        insertAt++;
+    }
+    this.blocks.add(insertAt, b);
 }
 
 public void splitBlock(BlockID targetId, crdt.character.CharId splitPoint, BlockID newBlockId) {
+    if (hasBlock(newBlockId)) {
+        return;
+    }
+
     for (int i = 0; i < blocks.size(); i++) {
         Block oldBlock = blocks.get(i);
         

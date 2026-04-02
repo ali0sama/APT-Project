@@ -1,4 +1,4 @@
-package utils;
+package crdt.utils;
 
 public class Clock {
 

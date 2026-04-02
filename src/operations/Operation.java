@@ -1,5 +1,7 @@
 package operations;
 
+import crdt.character.CharacterCRDT;
+
 public abstract class Operation {
 
     public final int userID;
@@ -15,4 +17,7 @@ public abstract class Operation {
     }
 
     public abstract Type getType();
+
+    
+    public abstract void apply(CharacterCRDT crdt);
 }
