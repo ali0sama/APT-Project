@@ -55,10 +55,38 @@ public List<Block> getVisibleBlocks() {
 }
 
 public void splitBlock(BlockID targetId, crdt.character.CharId splitPoint, BlockID newBlockId) {
-   
     for (int i = 0; i < blocks.size(); i++) {
-        if (blocks.get(i).getBlockId().equals(targetId)) {
-            blocks.add(i + 1, new Block(newBlockId));
+        Block oldBlock = blocks.get(i);
+        
+        if (oldBlock.getBlockId().equals(targetId)) {
+         
+            List<crdt.character.CRDTChar> allChars = oldBlock.getContent().getAllChars();
+            
+            int splitIndex = -1;
+            for (int j = 0; j < allChars.size(); j++) {
+                if (allChars.get(j).id.equals(splitPoint)) {
+                    splitIndex = j;
+                    break;
+                }
+            }
+
+            if (splitIndex != -1) {
+               
+                List<crdt.character.CRDTChar> stayChars = new ArrayList<>(allChars.subList(0, splitIndex + 1));
+                List<crdt.character.CRDTChar> moveChars = new ArrayList<>(allChars.subList(splitIndex + 1, allChars.size()));
+
+               
+                Block newBlock = new Block(newBlockId);
+                
+             
+                newBlock.getContent().bulkLoadLinear(moveChars);
+
+            
+                oldBlock.getContent().clear();
+                oldBlock.getContent().bulkLoadLinear(stayChars);
+
+                blocks.add(i + 1, newBlock);
+            }
             return;
         }
     }
