@@ -1,0 +1,67 @@
+# Compiled Java classes
+*.class
+
+# Build directories
+bin/
+build/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+*.log
+*.jar
+*.war
+# Compiled Java classes
+*.class
+
+# Build directories
+bin/
+build/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+*.log
+*.jar
+*.war
+# Compiled Java bytecode
+*.class
+
+# Build output folders
+out/
+bin/
+build/
+
+# IDE files - IntelliJ
+.idea/
+*.iml
+
+# IDE files - VS Code
+.vscode/
+
+# IDE files - Eclipse
+.classpath
+.project
+.settings/
+
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
