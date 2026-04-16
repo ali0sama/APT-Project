@@ -1,4 +1,4 @@
-package Cursor;
+package cursor;
 
 public class CursorTracker {
 
