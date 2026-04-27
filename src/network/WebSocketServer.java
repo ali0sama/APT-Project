@@ -65,7 +65,8 @@ public class WebSocketServer extends org.java_websocket.server.WebSocketServer {
      * @param port Port to listen on (default: 8080)
      */
     public WebSocketServer(int port) {
-        super(new InetSocketAddress(port));
+        // Bind explicitly to IPv4 loopback to avoid localhost IPv4/IPv6 mismatch on Windows.
+        super(new InetSocketAddress("127.0.0.1", port));
         System.out.println("[WebSocketServer] Initialized on port " + port);
     }
 

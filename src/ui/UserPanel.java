@@ -1,17 +1,16 @@
 package ui;
 
-import session.CollaborationSession;
-import session.UserPresence;
-
+import java.awt.*;
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
-import java.awt.*;
+import session.CollaborationSession;
+import session.UserPresence;
 
 public class UserPanel extends JPanel {
 
     private CollaborationSession session;
-    private final DefaultListModel<UserPresence> listModel;
-    private final JList<UserPresence> userList;
+    private final DefaultListModel<UserPresence> listModel; // holds the list of active users
+    private final JList<UserPresence> userList; // visual component to display users
 
     private static final Color[] USER_COLORS = {
         new Color(200, 50,  50),

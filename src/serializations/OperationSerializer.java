@@ -2,6 +2,8 @@ package serializations;
 
 import operations.*;
 import crdt.character.CharId;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 /**
  * Converts Operation objects to/from JSON strings for network transmission.
@@ -72,15 +74,17 @@ public class OperationSerializer {
      * Converts a JSON string back to an Operation object
      */
     public static Operation deserialize(String json) {
-        json = json.trim();
-        
-        // Extract operation type
-        String opType = extractStringValue(json, "op");
-        
+        JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+        if (!obj.has("op")) {
+            throw new IllegalArgumentException("Key not found in JSON: op");
+        }
+
+        String opType = obj.get("op").getAsString();
+
         if ("insert".equals(opType)) {
-            return deserializeInsert(json);
+            return deserializeInsert(obj);
         } else if ("delete".equals(opType)) {
-            return deserializeDelete(json);
+            return deserializeDelete(obj);
         }
         throw new IllegalArgumentException("Unknown operation type in JSON: " + opType);
     }
@@ -88,24 +92,26 @@ public class OperationSerializer {
     /**
      * Deserializes an InsertOperation from JSON
      */
-    private static InsertOperation deserializeInsert(String json) {
-        int userID = extractIntValue(json, "userID");
-        int clock = extractIntValue(json, "clock");
-        String value = extractStringValue(json, "value");
+    private static InsertOperation deserializeInsert(JsonObject obj) {
+        int userID = obj.get("userID").getAsInt();
+        int clock = obj.get("clock").getAsInt();
+        String value = obj.get("value").getAsString();
         char charValue = value.isEmpty() ? '\0' : value.charAt(0);
-        
-        // Handle parentID
+
+        // Handle parentID (nullable)
         CharId parentID = null;
-        Integer parentUserID = extractOptionalIntValue(json, "parentUserID");
-        Integer parentClock = extractOptionalIntValue(json, "parentClock");
-        
+        Integer parentUserID = (obj.has("parentUserID") && !obj.get("parentUserID").isJsonNull())
+                ? obj.get("parentUserID").getAsInt() : null;
+        Integer parentClock = (obj.has("parentClock") && !obj.get("parentClock").isJsonNull())
+                ? obj.get("parentClock").getAsInt() : null;
+
         if (parentUserID != null && parentClock != null) {
             parentID = new CharId(parentClock, parentUserID);
         }
         
         // Extract formatting flags
-        boolean bold = extractBooleanValue(json, "bold");
-        boolean italic = extractBooleanValue(json, "italic");
+        boolean bold = obj.has("bold") && obj.get("bold").getAsBoolean();
+        boolean italic = obj.has("italic") && obj.get("italic").getAsBoolean();
         
         return new InsertOperation(userID, clock, charValue, parentID, bold, italic);
     }
@@ -113,11 +119,11 @@ public class OperationSerializer {
     /**
      * Deserializes a DeleteOperation from JSON
      */
-    private static DeleteOperation deserializeDelete(String json) {
-        int userID = extractIntValue(json, "userID");
-        int clock = extractIntValue(json, "clock");
-        int targetUserID = extractIntValue(json, "targetUserID");
-        int targetClock = extractIntValue(json, "targetClock");
+    private static DeleteOperation deserializeDelete(JsonObject obj) {
+        int userID = obj.get("userID").getAsInt();
+        int clock = obj.get("clock").getAsInt();
+        int targetUserID = obj.get("targetUserID").getAsInt();
+        int targetClock = obj.get("targetClock").getAsInt();
         
         CharId targetID = new CharId(targetClock, targetUserID);
         return new DeleteOperation(userID, clock, targetID);
