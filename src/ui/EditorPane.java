@@ -1,20 +1,18 @@
 package ui;
 
-import crdt.character.CharacterCRDT;
-import crdt.character.CharId;
 import crdt.character.CRDTChar;
+import crdt.character.CharId;
+import crdt.character.CharacterCRDT;
 import crdt.utils.Clock;
-import operations.*;
-import serializations.OperationSerializer;
-import session.CollaborationSession;
-import session.CollaborationSession.UserRole;
-
-import javax.swing.*;
-import javax.swing.event.*;
-import javax.swing.text.*;
+import cursor.CursorTracker;
 import java.awt.*;
 import java.util.*;
 import java.util.List;
+import javax.swing.*;
+import javax.swing.event.*;
+import javax.swing.text.*;
+import operations.*;
+import serializations.OperationSerializer;
 
 public class EditorPane extends JPanel {
 
@@ -28,22 +26,6 @@ public class EditorPane extends JPanel {
         boolean isConnected();
     }
 
-    /**
-     * Member 3's MessageHandler must call these when server messages arrive.
-     * Obtain the instance via editorPane.getMessageCallback().
-     *
-     * usersPipeSeparated format: "1:EDITOR|2:VIEWER|"
-     * operationJson: raw op JSON from OperationSerializer (e.g. {"op":"insert",...})
-     */
-    public interface MessageCallback {
-        void onRemoteOperation(String operationJson);
-        void onRemoteCursorUpdate(int userID, int position);
-        void onUserListUpdate(String usersPipeSeparated);
-        void onHistoryReceived(List<String> operationJsonList);
-        void onConnectionEstablished();
-        void onConnectionLost(String reason);
-    }
-
     // ─── Fields ──────────────────────────────────────────────────────────────
 
     private final JTextPane textPane;
@@ -51,15 +33,14 @@ public class EditorPane extends JPanel {
     private Clock clock;
     private int localUserID;
     private String sessionID;
-    private final boolean isEditor;
+    private boolean isEditor;
 
     private boolean suppressDocumentEvents = false;
     private CharId caretCharId = null;
 
     private NetworkSender networkSender;
-    private final MessageCallback messageCallback;
 
-    private final Map<Integer, Integer> remoteCursorPositions = new HashMap<>();
+    private final CursorTracker cursorTracker = new CursorTracker();
 
     private static final Color[] CURSOR_COLORS = {
         Color.RED,
@@ -69,8 +50,6 @@ public class EditorPane extends JPanel {
         new Color(140, 30, 170),
         new Color(0, 160, 160)
     };
-
-    private static final String SERVER_URL = "ws://localhost:8080";
 
     // ─── Constructor ─────────────────────────────────────────────────────────
 
@@ -91,10 +70,14 @@ public class EditorPane extends JPanel {
         setLayout(new BorderLayout());
         add(scrollPane, BorderLayout.CENTER);
 
-        messageCallback = new MessageCallbackImpl();
-
         attachDocumentListener();
         attachCaretListener();
+    }
+
+    /** Updates whether the local user can edit the document. */
+    public void setEditingEnabled(boolean enabled) {
+        this.isEditor = enabled;
+        textPane.setEditable(enabled);
     }
 
     // ─── Document Listener ───────────────────────────────────────────────────
@@ -104,7 +87,7 @@ public class EditorPane extends JPanel {
 
             @Override
             public void insertUpdate(DocumentEvent e) {
-                if (suppressDocumentEvents) return;
+                if (!isEditor || suppressDocumentEvents) return; // to block writing when viewer
                 try {
                     int offset = e.getOffset();
                     int length = e.getLength();
@@ -132,7 +115,10 @@ public class EditorPane extends JPanel {
 
                         if (networkSender != null && networkSender.isConnected()) {
                             InsertOperation op = new InsertOperation(localUserID, t, ch, parentID, bold, italic);
+                            System.out.println("[EditorPane] Sending insert operation: user=" + localUserID + " char='" + ch + "' clock=" + t);
                             networkSender.sendMessage(buildOperationEnvelope(op));
+                        } else {
+                            System.out.println("[EditorPane] Cannot send: networkSender is null or disconnected");
                         }
 
                         caretCharId = id;
@@ -146,7 +132,7 @@ public class EditorPane extends JPanel {
 
             @Override
             public void removeUpdate(DocumentEvent e) {
-                if (suppressDocumentEvents) return;
+                if (!isEditor || suppressDocumentEvents) return;
                 int offset = e.getOffset();
                 int length = e.getLength();
 
@@ -183,7 +169,7 @@ public class EditorPane extends JPanel {
 
     private void attachCaretListener() {
         textPane.addCaretListener(e -> {
-            if (suppressDocumentEvents) return;
+            if (!isEditor || suppressDocumentEvents) return;
             int pos = e.getDot();
             List<CRDTChar> visible = crdt.getVisibleChars();
             caretCharId = (pos == 0 || visible.isEmpty())
@@ -191,7 +177,7 @@ public class EditorPane extends JPanel {
                     : visible.get(Math.min(pos - 1, visible.size() - 1)).id;
 
             if (networkSender != null && networkSender.isConnected()) {
-                networkSender.sendMessage(buildCursorEnvelope(pos));
+                networkSender.sendMessage(buildCursorEnvelope());
             }
         });
     }
@@ -270,12 +256,13 @@ public class EditorPane extends JPanel {
         int docLen = textPane.getDocument().getLength();
         if (docLen == 0) return;
 
-        for (Map.Entry<Integer, Integer> entry : remoteCursorPositions.entrySet()) {
+        for (Map.Entry<Integer, Integer> entry : cursorTracker.getAll().entrySet()) {
             int uid = entry.getKey();
-            int pos = Math.max(0, Math.min(entry.getValue(), docLen - 1));
+            int caretPos = Math.max(0, Math.min(entry.getValue(), docLen));
+            int anchor = Math.max(0, Math.min(caretPos, docLen - 1));
             Color c = CURSOR_COLORS[uid % CURSOR_COLORS.length];
             try {
-                hl.addHighlight(pos, pos + 1, new CursorPainter(c));
+                hl.addHighlight(anchor, anchor + 1, new CursorPainter(c, caretPos));
             } catch (BadLocationException e) {
                 // stale cursor position — skip silently
             }
@@ -285,20 +272,36 @@ public class EditorPane extends JPanel {
     /** Draws a 2px vertical colored line at the character's left edge to represent a remote cursor. */
     private static class CursorPainter implements Highlighter.HighlightPainter {
         private final Color color;
+        private final int caretPos;
 
-        CursorPainter(Color color) {
+        CursorPainter(Color color, int caretPos) {
             this.color = color;
+            this.caretPos = caretPos;
         }
 
         @Override
         @SuppressWarnings("deprecation")
         public void paint(Graphics g, int p0, int p1, Shape bounds, JTextComponent c) {
             try {
-                Rectangle r = c.modelToView(p0);
-                if (r != null) {
-                    g.setColor(color);
-                    g.fillRect(r.x, r.y, 2, r.height);
+                int len = c.getDocument().getLength();
+                if (len == 0) return;
+
+                int clamped = Math.max(0, Math.min(caretPos, len));
+                Rectangle r;
+                int x;
+
+                if (clamped < len) {
+                    r = c.modelToView(clamped);
+                    if (r == null) return;
+                    x = r.x;
+                } else {
+                    r = c.modelToView(len - 1);
+                    if (r == null) return;
+                    x = r.x + r.width;
                 }
+
+                g.setColor(color);
+                g.fillRect(x, r.y, 2, r.height);
             } catch (BadLocationException e) {
                 // ignore
             }
@@ -330,36 +333,6 @@ public class EditorPane extends JPanel {
         refreshDisplay();
     }
 
-    // ─── Session / Network ───────────────────────────────────────────────────
-
-    public void joinSession(String sid, int uid, String role) {
-        this.sessionID = sid;
-        this.localUserID = uid;
-
-        if (networkSender == null) {
-            // Network layer not available yet (waiting for Member 3's WebSocketClient)
-            JOptionPane.showMessageDialog(this,
-                "Network layer not yet available.\n"
-                + "Session ID saved: \"" + sid + "\"\n\n"
-                + "Share this ID with others so they can join when the network is ready.\n"
-                + "(Waiting for Member 3 - WebSocketClient implementation)",
-                "No Network Connection",
-                JOptionPane.INFORMATION_MESSAGE);
-            // Notify EditorWindow to show the session ID in the status bar
-            EditorWindow win = (EditorWindow) SwingUtilities.getWindowAncestor(this);
-            if (win != null) win.setSessionId(sid);
-            return;
-        }
-
-        networkSender.connect(SERVER_URL);
-        networkSender.sendMessage(
-            "{\"action\":\"join\",\"sessionID\":\"" + sid
-            + "\",\"userID\":" + uid
-            + ",\"role\":\"" + role.toLowerCase()
-            + "\",\"data\":{}}"
-        );
-    }
-
     // ─── Import / Export ─────────────────────────────────────────────────────
 
     public String getPlainText() {
@@ -371,7 +344,7 @@ public class EditorPane extends JPanel {
     public void loadPlainText(String text) {
         crdt = new CharacterCRDT();
         clock = new Clock();
-        remoteCursorPositions.clear();
+        cursorTracker.clear();
         caretCharId = null;
 
         for (int i = 0; i < text.length(); i++) {
@@ -383,14 +356,57 @@ public class EditorPane extends JPanel {
         refreshDisplay();
     }
 
-    // ─── Integration Points for Member 3 ─────────────────────────────────────
+    // ─── Integration Points ───────────────────────────────────────────────────
 
     public void setNetworkSender(NetworkSender sender) {
         this.networkSender = sender;
     }
 
-    public MessageCallback getMessageCallback() {
-        return messageCallback;
+    /** Exposes the CRDT so EditorWindow can share it with WebSocketClient. */
+    public CharacterCRDT getCRDT() {
+        return crdt;
+    }
+
+    /** Exposes the Clock so EditorWindow can share it with WebSocketClient. */
+    public Clock getClock() {
+        return clock;
+    }
+
+    /** Updates session state without triggering a network connection. */
+    public void setSessionInfo(String sid, int uid) {
+        this.sessionID = sid;
+        this.localUserID = uid;
+    }
+
+    /**
+     * Receives remote cursor positions as CharIds (from WebSocketClient snapshot),
+     * converts them to integer offsets using the local CRDT, and re-renders cursors.
+     * Called from EditorWindow's refresh callback on the EDT.
+     */
+    public void updateRemoteCursorsFromCharIds(Map<Integer, CharId> charIdCursors) {
+        cursorTracker.clear();
+        List<CRDTChar> visible = crdt.getVisibleChars();
+        for (Map.Entry<Integer, CharId> entry : charIdCursors.entrySet()) {
+            CharId cid = entry.getValue();
+            if (cid == null) {
+                cursorTracker.update(entry.getKey(), 0);
+            } else {
+                boolean found = false;
+                for (int i = 0; i < visible.size(); i++) {
+                    if (visible.get(i).id.equals(cid)) {
+                        cursorTracker.update(entry.getKey(), i + 1);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    // If the referenced char is not visible yet (or got tombstoned),
+                    // place cursor at end to avoid a stale one-char lag.
+                    cursorTracker.update(entry.getKey(), visible.size());
+                }
+            }
+        }
+        renderRemoteCursors();
     }
 
     // ─── Envelope Builders ───────────────────────────────────────────────────
@@ -405,98 +421,14 @@ public class EditorPane extends JPanel {
             + ",\"data\":" + opJson + "}";
     }
 
-    private String buildCursorEnvelope(int pos) {
+    private String buildCursorEnvelope() {
+        // Encode cursor as CharId (afterUserID/afterClock) — WebSocketClient.sendCursorPosition() expects this format
+        int afterUserID = (caretCharId == null) ? -1 : caretCharId.userID;
+        int afterClock  = (caretCharId == null) ? -1 : caretCharId.counter;
         return "{\"action\":\"cursor\""
             + ",\"sessionID\":\"" + sessionID + "\""
             + ",\"userID\":" + localUserID
             + ",\"role\":\"" + (isEditor ? "editor" : "viewer") + "\""
-            + ",\"data\":{\"position\":" + pos + "}}";
-    }
-
-    // ─── MessageCallback Implementation ──────────────────────────────────────
-
-    private class MessageCallbackImpl implements MessageCallback {
-
-        @Override
-        public void onRemoteOperation(String operationJson) {
-            SwingUtilities.invokeLater(() -> {
-                try {
-                    Operation op = OperationSerializer.deserialize(operationJson);
-                    clock.update(op.clock);
-                    op.apply(crdt);
-                    refreshDisplay();
-                } catch (Exception e) {
-                    System.err.println("[EditorPane] Failed to apply remote op: " + e.getMessage());
-                }
-            });
-        }
-
-        @Override
-        public void onRemoteCursorUpdate(int userID, int position) {
-            SwingUtilities.invokeLater(() -> {
-                remoteCursorPositions.put(userID, position);
-                renderRemoteCursors();
-            });
-        }
-
-        @Override
-        public void onUserListUpdate(String usersPipeSeparated) {
-            SwingUtilities.invokeLater(() -> {
-                CollaborationSession updated = new CollaborationSession(sessionID);
-                for (String part : usersPipeSeparated.split("\\|")) {
-                    if (part.trim().isEmpty()) continue;
-                    String[] kv = part.split(":");
-                    if (kv.length == 2) {
-                        try {
-                            int uid = Integer.parseInt(kv[0].trim());
-                            UserRole role = UserRole.valueOf(kv[1].trim().toUpperCase());
-                            updated.addUser(uid, role);
-                        } catch (Exception e) {
-                            System.err.println("[EditorPane] Failed to parse user entry: " + part);
-                        }
-                    }
-                }
-                EditorWindow win = (EditorWindow) SwingUtilities.getWindowAncestor(EditorPane.this);
-                if (win != null) win.updateSession(updated);
-            });
-        }
-
-        @Override
-        public void onHistoryReceived(List<String> operationJsonList) {
-            SwingUtilities.invokeLater(() -> {
-                for (String json : operationJsonList) {
-                    try {
-                        Operation op = OperationSerializer.deserialize(json);
-                        clock.update(op.clock);
-                        op.apply(crdt);
-                    } catch (Exception e) {
-                        System.err.println("[EditorPane] Failed to apply history op: " + e.getMessage());
-                    }
-                }
-                refreshDisplay();
-            });
-        }
-
-        @Override
-        public void onConnectionEstablished() {
-            SwingUtilities.invokeLater(() -> {
-                EditorWindow win = (EditorWindow) SwingUtilities.getWindowAncestor(EditorPane.this);
-                if (win != null) win.setStatus("Connected");
-            });
-        }
-
-        @Override
-        public void onConnectionLost(String reason) {
-            SwingUtilities.invokeLater(() -> {
-                EditorWindow win = (EditorWindow) SwingUtilities.getWindowAncestor(EditorPane.this);
-                if (win != null) win.setStatus("Disconnected");
-                JOptionPane.showMessageDialog(
-                    EditorPane.this,
-                    "Connection lost: " + reason,
-                    "Disconnected",
-                    JOptionPane.WARNING_MESSAGE
-                );
-            });
-        }
+            + ",\"data\":{\"afterUserID\":" + afterUserID + ",\"afterClock\":" + afterClock + "}}";
     }
 }
