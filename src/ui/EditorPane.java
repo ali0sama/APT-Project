@@ -38,7 +38,15 @@ public class EditorPane extends JPanel {
     private boolean suppressDocumentEvents = false;
     private CharId caretCharId = null;
 
+    // Saved selection — refreshed by caret listener so bold/italic buttons
+    // can still read it after clicking the button clears the live selection.
+    private int savedSelStart = 0;
+    private int savedSelEnd   = 0;
+
     private NetworkSender networkSender;
+
+    // Called whenever the caret moves, so EditorWindow can update toolbar button states
+    private Runnable onFormattingChange;
 
     private final CursorTracker cursorTracker = new CursorTracker();
 
@@ -169,6 +177,16 @@ public class EditorPane extends JPanel {
 
     private void attachCaretListener() {
         textPane.addCaretListener(e -> {
+            // Only overwrite saved selection when the user actually has text selected.
+            // Clicking a button fires a caret event with dot==mark (no selection),
+            // which would wipe the saved range before applyFormatting can read it.
+            int selStart = Math.min(e.getDot(), e.getMark());
+            int selEnd   = Math.max(e.getDot(), e.getMark());
+            if (selStart != selEnd) {
+                savedSelStart = selStart;
+                savedSelEnd   = selEnd;
+            }
+
             if (!isEditor || suppressDocumentEvents) return;
             int pos = e.getDot();
             List<CRDTChar> visible = crdt.getVisibleChars();
@@ -179,6 +197,7 @@ public class EditorPane extends JPanel {
             if (networkSender != null && networkSender.isConnected()) {
                 networkSender.sendMessage(buildCursorEnvelope());
             }
+            if (onFormattingChange != null) onFormattingChange.run();
         });
     }
 
@@ -320,17 +339,53 @@ public class EditorPane extends JPanel {
         applyFormatting(false, true);
     }
 
-    private void applyFormatting(boolean bold, boolean italic) {
+    private void applyFormatting(boolean toggleBold, boolean toggleItalic) {
         int start = textPane.getSelectionStart();
-        int end = textPane.getSelectionEnd();
-        if (start == end) return;
-
-        List<CRDTChar> visible = crdt.getVisibleChars();
-        for (int i = start; i < end && i < visible.size(); i++) {
-            if (bold) crdt.setBold(visible.get(i).id, true);
-            if (italic) crdt.setItalic(visible.get(i).id, true);
+        int end   = textPane.getSelectionEnd();
+        if (start == end) {
+            start = savedSelStart;
+            end   = savedSelEnd;
         }
-        refreshDisplay();
+
+        if (start != end) {
+            // ── Selection exists: toggle bold/italic on the selected CRDT chars ──
+            List<CRDTChar> visible  = crdt.getVisibleChars();
+            List<CRDTChar> selected = new ArrayList<>();
+            for (int i = start; i < end && i < visible.size(); i++) selected.add(visible.get(i));
+            if (selected.isEmpty()) return;
+
+            if (toggleBold) {
+                boolean allBold = selected.stream().allMatch(CRDTChar::isBold);
+                for (CRDTChar c : selected) crdt.setBold(c.id, !allBold);
+            }
+            if (toggleItalic) {
+                boolean allItalic = selected.stream().allMatch(CRDTChar::isItalic);
+                for (CRDTChar c : selected) crdt.setItalic(c.id, !allItalic);
+            }
+            refreshDisplay();
+        } else {
+            // ── No selection: toggle the input attributes so the next typed chars are bold/italic ──
+            javax.swing.text.MutableAttributeSet inputAttrs = textPane.getInputAttributes();
+            if (toggleBold)   StyleConstants.setBold  (inputAttrs, !StyleConstants.isBold  (inputAttrs));
+            if (toggleItalic) StyleConstants.setItalic(inputAttrs, !StyleConstants.isItalic(inputAttrs));
+        }
+
+        if (onFormattingChange != null) onFormattingChange.run();
+    }
+
+    /** Reflects bold state: input-attribute mode when no selection, or char-at-caret otherwise. */
+    public boolean isBoldAtCaret() {
+        return StyleConstants.isBold(textPane.getInputAttributes());
+    }
+
+    /** Reflects italic state: input-attribute mode when no selection, or char-at-caret otherwise. */
+    public boolean isItalicAtCaret() {
+        return StyleConstants.isItalic(textPane.getInputAttributes());
+    }
+
+    /** Registers a callback fired on every caret move so the toolbar can sync button states. */
+    public void setOnFormattingChange(Runnable r) {
+        this.onFormattingChange = r;
     }
 
     // ─── Import / Export ─────────────────────────────────────────────────────
@@ -339,6 +394,10 @@ public class EditorPane extends JPanel {
         // Use the visible textPane content as the authoritative source for export —
         // avoids any CRDT sync edge cases and exports exactly what the user sees.
         return textPane.getText();
+    }
+
+    public void clearDocument() {
+        loadPlainText("");
     }
 
     public void loadPlainText(String text) {
