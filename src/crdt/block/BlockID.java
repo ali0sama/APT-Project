@@ -12,6 +12,9 @@ public class BlockID implements Comparable<BlockID> {
         this.userId = userId;
     }
 
+    public int getCounter() { return counter; }
+    public int getUserId() { return userId; }
+
     @Override
     public int compareTo(BlockID other) {
         if (this.counter != other.counter) {

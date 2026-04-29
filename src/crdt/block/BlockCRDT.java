@@ -60,6 +60,10 @@ public List<Block> getVisibleBlocks() {
     return visible;
 }
 
+public List<Block> getAllBlocks() {
+    return new ArrayList<>(blocks);
+}
+
 
     public void insertBlock(Block b) {
     if (hasBlock(b.getBlockId())) {

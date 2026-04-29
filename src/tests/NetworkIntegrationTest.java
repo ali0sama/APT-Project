@@ -31,6 +31,7 @@ public class NetworkIntegrationTest {
         System.out.println("\n=== Network Integration Test ===");
 
         WebSocketServer server = new WebSocketServer(PORT);
+        server.setReuseAddr(true);
         server.start();
         Thread.sleep(1000);
 
