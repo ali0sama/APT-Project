@@ -7,6 +7,11 @@ import tests.NetworkIntegrationTest;
 import serializations.OperationSerializer;
 import operations.*;
 import crdt.character.*;
+import crdt.block.*;
+import database.DatabaseManager;
+import database.FileRepository;
+
+import java.sql.SQLException;
 
 public class Main {
     public static void main(String[] args) {
@@ -25,6 +30,9 @@ public class Main {
         } catch (Exception e) {
             e.printStackTrace();
         }
+
+        // Phase 3: Persistence tests
+        testPersistence();
     }
 
     /**
@@ -146,6 +154,107 @@ public class Main {
 
         System.out.println("CRDT after delete: " + crdt.getDocument());
         System.out.println("✓ Apply deserialized operation test successful");
+    }
+
+    // =========================================================
+    // Phase 3: Persistence Tests
+    // =========================================================
+
+    private static void testPersistence() {
+        System.out.println("\n=== Phase 3: Persistence Tests ===");
+
+        DatabaseManager db = new DatabaseManager();
+        try {
+            db.connect();
+            FileRepository repo = new FileRepository(db);
+
+            testRoundTrip(repo);
+            testFormattingPreserved(repo);
+            testDeleteReturnsNull(repo);
+
+            System.out.println("\n=== All Persistence Tests Passed ===\n");
+        } catch (SQLException e) {
+            System.err.println("PERSISTENCE TEST FAILED: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            try { db.disconnect(); } catch (SQLException ignored) {}
+        }
+    }
+
+    private static void testRoundTrip(FileRepository repo) throws SQLException {
+        System.out.println("\nTest P1: Save and reload document text");
+        String docId = "test-roundtrip-001";
+
+        // Build a simple BlockCRDT: one block, "Hello World"
+        BlockCRDT crdt = new BlockCRDT();
+        Block block = new Block(new BlockID(1, 99));
+        String text = "Hello World";
+        CharId parent = null;
+        for (int i = 0; i < text.length(); i++) {
+            CharId id = new CharId(i + 1, 99);
+            block.getContent().insert(id, text.charAt(i), parent);
+            parent = id;
+        }
+        crdt.insertBlock(block);
+
+        repo.saveFile(docId, "Test Doc", "EDITORX", "VIEWERX", crdt);
+        BlockCRDT loaded = repo.loadFile(docId);
+
+        assert loaded != null : "Loaded CRDT should not be null";
+        String reloaded = loaded.getDocumentText();
+        assert reloaded.equals(text) : "Text mismatch: expected '" + text + "' got '" + reloaded + "'";
+
+        repo.deleteFile(docId);
+        System.out.println("✓ Round-trip text preserved: " + reloaded);
+    }
+
+    private static void testFormattingPreserved(FileRepository repo) throws SQLException {
+        System.out.println("\nTest P2: Bold and italic flags survive save/load");
+        String docId = "test-formatting-002";
+
+        BlockCRDT crdt = new BlockCRDT();
+        Block block = new Block(new BlockID(1, 99));
+
+        CharId id1 = new CharId(1, 99);
+        CharId id2 = new CharId(2, 99);
+        CharId id3 = new CharId(3, 99);
+        block.getContent().insert(id1, 'B', null);
+        block.getContent().setBold(id1, true);
+        block.getContent().insert(id2, 'I', id1);
+        block.getContent().setItalic(id2, true);
+        block.getContent().insert(id3, 'N', id2);
+        crdt.insertBlock(block);
+
+        repo.saveFile(docId, "Format Doc", "EDITOR2", "VIEWER2", crdt);
+        BlockCRDT loaded = repo.loadFile(docId);
+
+        assert loaded != null : "Loaded CRDT should not be null";
+        Block loadedBlock = loaded.getVisibleBlocks().get(0);
+
+        CRDTChar charB = loadedBlock.getContent().getChar(id1);
+        CRDTChar charI = loadedBlock.getContent().getChar(id2);
+        CRDTChar charN = loadedBlock.getContent().getChar(id3);
+
+        assert charB != null && charB.isBold()   : "B should be bold";
+        assert charI != null && charI.isItalic() : "I should be italic";
+        assert charN != null && !charN.isBold() && !charN.isItalic() : "N should have no formatting";
+
+        repo.deleteFile(docId);
+        System.out.println("✓ Bold flag preserved for 'B', italic flag preserved for 'I'");
+    }
+
+    private static void testDeleteReturnsNull(FileRepository repo) throws SQLException {
+        System.out.println("\nTest P3: loadFile returns null after delete");
+        String docId = "test-delete-003";
+
+        BlockCRDT crdt = new BlockCRDT();
+        crdt.insertBlock(new BlockID(1, 99), 0);
+        repo.saveFile(docId, "Delete Me", "EDITOR3", "VIEWER3", crdt);
+        repo.deleteFile(docId);
+
+        BlockCRDT result = repo.loadFile(docId);
+        assert result == null : "loadFile should return null for deleted document";
+        System.out.println("✓ loadFile returns null after deletion");
     }
 
     /**

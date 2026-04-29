@@ -32,11 +32,11 @@ import session.UserPresence;
  */
 public class WebSocketServer extends org.java_websocket.server.WebSocketServer {
 
-    // Map of sessionID -> CollaborationSession
-    private final Map<String, CollaborationSession> sessions = new HashMap<>();
+    // Map of sessionID -> CollaborationSession (ConcurrentHashMap for thread-safe concurrent joins)
+    private final Map<String, CollaborationSession> sessions = new java.util.concurrent.ConcurrentHashMap<>();
 
     // Map of WebSocket -> (sessionID, userID) for tracking connections
-    private final Map<WebSocket, UserConnectionInfo> connectionMap = new HashMap<>();
+    private final Map<WebSocket, UserConnectionInfo> connectionMap = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static final String ACTION_JOIN = "join";
     private static final String ACTION_OPERATION = "operation";
